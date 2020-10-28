@@ -129,8 +129,6 @@ void ThreadFork(void (*func)());
 void ThreadYield();		
 
 void PrintInt(int number);	//my System Call
-
-void Sleep(int number);
 #endif /* IN_ASM */
 
 #endif /* SYSCALL_H */

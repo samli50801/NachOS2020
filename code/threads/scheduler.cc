@@ -33,6 +33,8 @@ Scheduler::Scheduler()
 {
 //	schedulerType = type;
 	readyList = new List<Thread *>; 
+	sleepList = new list<pair<Thread *, int> >;
+	current_interrupt = 0;
 	toBeDestroyed = NULL;
 } 
 
@@ -44,6 +46,7 @@ Scheduler::Scheduler()
 Scheduler::~Scheduler()
 { 
     delete readyList; 
+	delete sleepList;
 } 
 
 //----------------------------------------------------------------------
@@ -183,4 +186,47 @@ Scheduler::Print()
 {
     cout << "Ready list contents:\n";
     readyList->Apply(ThreadPrint);
+}
+
+//----------------------------------------------------------------------
+// Check if sleepList is empty
+//----------------------------------------------------------------------
+bool Scheduler::IsEmpty()
+{
+	if (sleepList->size() == 0) return true;
+	return false;
+}
+
+//----------------------------------------------------------------------
+// Check out if any thread should be ready to run
+//----------------------------------------------------------------------
+void Scheduler::BlockThread(Thread* thread, int wait)
+{
+	ASSERT(kernel->interrupt->getLevel() == IntOff);
+	sleepList->push_back(make_pair(thread, current_interrupt + wait));	// "current_interrupt + wait" is the time that sleeping thread should wake up
+	thread->Sleep(false);	//Convert the thread from READY to BLOCKED status
+}
+
+//----------------------------------------------------------------------
+// Check out if any thread should be ready to run
+//----------------------------------------------------------------------
+bool Scheduler::PutToReady()
+{
+	bool woken = false;
+	current_interrupt++;
+	//Check out if any thread should be ready to run
+	for (list<pair<Thread *, int> >::iterator it = sleepList->begin(); it != sleepList->end();)
+	{
+		//Condition: current time is larger than "the time thread was put into the sleepList plus waiting time"
+		if (current_interrupt >= it->second)
+		{
+			woken = true;
+			cout << "sleepList::PutToReady Thread woken" << endl;
+			this->ReadyToRun(it->first);	//Convert the thread from BLOCKED to READY status
+			it = sleepList->erase(it);	//Remove the thread from sleeList
+		}
+		else
+			it++;
+	}
+	return woken;
 }

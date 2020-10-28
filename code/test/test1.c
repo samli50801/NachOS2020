@@ -1,7 +1,10 @@
+
 #include "syscall.h"
-main()
-	{
-		int	n;
-		for (n=9;n>5;n--)
-			PrintInt(n);
+main() {
+	int i;
+	for (i = 0; i < 5; i++) {
+		Sleep(1000000);
+		PrintInt(2222);
 	}
+	return 0;
+}

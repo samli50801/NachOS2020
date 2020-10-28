@@ -28,6 +28,11 @@
 //	endian machine, and we're now running on a big endian machine.
 //----------------------------------------------------------------------
 
+#define PAGE_OCCU true
+#define PAGE_FREE false
+bool AddrSpace::PhyPageStatus[NumPhysPages] = { PAGE_FREE };
+int AddrSpace::NumFreePages = NumPhysPages;
+
 static void 
 SwapHeader (NoffHeader *noffH)
 {
@@ -53,19 +58,18 @@ SwapHeader (NoffHeader *noffH)
 
 AddrSpace::AddrSpace()
 {
-    pageTable = new TranslationEntry[NumPhysPages];
-    for (unsigned int i = 0; i < NumPhysPages; i++) {
-	pageTable[i].virtualPage = i;	// for now, virt page # = phys page #
-	pageTable[i].physicalPage = i;
-//	pageTable[i].physicalPage = 0;
-	pageTable[i].valid = TRUE;
-//	pageTable[i].valid = FALSE;
-	pageTable[i].use = FALSE;
-	pageTable[i].dirty = FALSE;
-	pageTable[i].readOnly = FALSE;  
-    }
-    
-    // zero out the entire address space
+	/*pageTable = new TranslationEntry[NumPhysPages];
+	for (unsigned int i = 0; i < NumPhysPages; i++) {
+		pageTable[i].virtualPage = i;   // for now, virt page # = phys page #
+		pageTable[i].physicalPage = i;
+		//      pageTable[i].physicalPage = 0;
+		pageTable[i].valid = TRUE;
+		//      pageTable[i].valid = FALSE;
+		pageTable[i].use = FALSE;
+		pageTable[i].dirty = FALSE;
+		pageTable[i].readOnly = FALSE;
+	}*/
+	// 清空記憶體，但是不知道為什麼被註解掉了。
 //    bzero(kernel->machine->mainMemory, MemorySize);
 }
 
@@ -76,7 +80,12 @@ AddrSpace::AddrSpace()
 
 AddrSpace::~AddrSpace()
 {
-   delete pageTable;
+	//釋放本程式佔用的實體頁
+	for (int i = 0; i < numPages; i++) {
+		AddrSpace::PhyPageStatus[pageTable[i].physicalPage] = PAGE_FREE;
+		AddrSpace::NumFreePages++;
+	}
+	delete pageTable;
 }
 
 
@@ -114,32 +123,47 @@ AddrSpace::Load(char *fileName)
     numPages = divRoundUp(size, PageSize);
 //	cout << "number of pages of " << fileName<< " is "<<numPages<<endl;
     size = numPages * PageSize;
-
+	//檢查是否有足夠的空閒實體頁
     ASSERT(numPages <= NumPhysPages);		// check we're not trying
 						// to run anything too big --
 						// at least until we have
 						// virtual memory
+	//進行分配
+	pageTable = new TranslationEntry[numPages];
+	for (unsigned int i = 0, idx = 0; i < numPages; i++) {
+		pageTable[i].virtualPage = i;
+		while (idx < NumPhysPages && AddrSpace::PhyPageStatus[idx] == PAGE_OCCU) idx++;
+		AddrSpace::PhyPageStatus[idx] = PAGE_OCCU;
+		AddrSpace::NumFreePages--;
+		//清空即將分配的 page
+		bzero(&kernel->machine->mainMemory[idx * PageSize], PageSize);
+		pageTable[i].physicalPage = idx;
+		pageTable[i].valid = true;
+		pageTable[i].use = false;
+		pageTable[i].dirty = false;
+		pageTable[i].readOnly = false;
+	}
 
     DEBUG(dbgAddr, "Initializing address space: " << numPages << ", " << size);
 
 // then, copy in the code and data segments into memory
 	if (noffH.code.size > 0) {
-        DEBUG(dbgAddr, "Initializing code segment.");
-	DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
-        	executable->ReadAt(
-		&(kernel->machine->mainMemory[noffH.code.virtualAddr]), 
+		DEBUG(dbgAddr, "Initializing code segment.");
+		DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
+		executable->ReadAt(
+			&(kernel->machine->mainMemory[pageTable[noffH.code.virtualAddr / PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]),
 			noffH.code.size, noffH.code.inFileAddr);
-    }
+	}
 	if (noffH.initData.size > 0) {
-        DEBUG(dbgAddr, "Initializing data segment.");
-	DEBUG(dbgAddr, noffH.initData.virtualAddr << ", " << noffH.initData.size);
-        executable->ReadAt(
-		&(kernel->machine->mainMemory[noffH.initData.virtualAddr]),
+		DEBUG(dbgAddr, "Initializing data segment.");
+		DEBUG(dbgAddr, noffH.initData.virtualAddr << ", " << noffH.initData.size);
+		executable->ReadAt(
+			&(kernel->machine->mainMemory[pageTable[noffH.initData.virtualAddr / PageSize].physicalPage * PageSize + (noffH.code.virtualAddr%PageSize)]),
 			noffH.initData.size, noffH.initData.inFileAddr);
-    }
+	}
 
-    delete executable;			// close file
-    return TRUE;			// success
+	delete executable;                  // close file
+	return TRUE;                        // success
 }
 
 //----------------------------------------------------------------------

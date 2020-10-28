@@ -46,29 +46,24 @@ Alarm::Alarm(bool doRandom)
 //	interrupts.  In this case, we can safely halt.
 //----------------------------------------------------------------------
 
-void Alarm::CallBack() {
-	Interrupt *interrupt = kernel->interrupt;
-	MachineStatus status = interrupt->getStatus();
-	bool woken = kernel->scheduler->PutToReady();
-
-	//如果沒有程式需要計數了，就把時脈中斷遮蔽掉
-	if (status == IdleMode && !woken && kernel->scheduler->IsEmpty()) {// is it time to quit?
-		if (!interrupt->AnyFutureInterrupts()) {
-			timer->Disable();   // turn off the timer
-		}
+void 
+Alarm::CallBack() 
+{
+    Interrupt *interrupt = kernel->interrupt;
+    MachineStatus status = interrupt->getStatus();
+    
+    if (status == IdleMode) {	// is it time to quit?
+        if (!interrupt->AnyFutureInterrupts()) {
+	    timer->Disable();	// turn off the timer
 	}
-	else {                    // there's someone to preempt
-		interrupt->YieldOnReturn();
-	}
+    } else {			// there's someone to preempt
+	interrupt->YieldOnReturn();
+    }
 }
 
-void Alarm::WaitUntil(int x) {
+void Alarm::WaitUntil(int number)
+{
 
-	//close the interrupt
-	IntStatus oldLevel = kernel->interrupt->SetLevel(IntOff);
-	Thread* t = kernel->currentThread;
-	cout << "Alarm::WaitUntil go sleep------" << endl;
-	kernel->scheduler->BlockThread(t, x);
-	//open the interrupt
-	kernel->interrupt->SetLevel(oldLevel);
+
 }
+
